@@ -5,6 +5,58 @@ import { CommandProcessor } from "../src/cli/CommandProcessor.js";
 import { Tokenizer } from "../src/cli/Tokenizer.js";
 import { MemoryDocumentStore } from "./MemoryDocumentStore.js";
 
+test("cross-parent grouping and deletion undo restore every parent and sibling order", async () => {
+  const session = new EditorSession(new MemoryDocumentStore());
+  const cli = new CommandProcessor(session);
+  for (const line of ["init", "create g left", "create g right", "create g nested in left",
+    "create rect a 1 2 3 4 in nested", "create circle b 1 2 3 in right",
+    "create circle c 4 5 6 in right"]) assert.doesNotMatch(await cli.run(line), /^error:/);
+  const before = session.getDocument().tree();
+  await cli.run("group combined b nested");
+  assert.deepEqual(session.getDocument().find("combined").getChildren().map(s => s.getId()), ["nested", "b"]);
+  const grouped = session.getDocument().tree();
+  await cli.run("delete combined");
+  assert.throws(() => session.getDocument().find("a"), /no such shape/);
+  await cli.run("undo");
+  assert.equal(session.getDocument().tree(), grouped);
+  await cli.run("undo");
+  assert.equal(session.getDocument().tree(), before);
+});
+
+test("specified error messages match and failed attempts never change state", async () => {
+  const session = new EditorSession(new MemoryDocumentStore());
+  const cli = new CommandProcessor(session);
+  await cli.run("init");
+  await cli.run("create g scene");
+  await cli.run("create rect r1 0 0 10 10 in scene");
+  const before = session.getDocument().tree();
+  for (const [command, message] of [
+    ["create g r1", "id already exists: r1"],
+    ["move r9 1 2", "no such shape: r9"],
+    ["create g child in node9", "no such container: node9"],
+    ["create g child in r1", "not a container: r1"],
+    ["create hexagon h", "unknown shape type: hexagon (is the plugin loaded?)"],
+    ["group bad r1 scene", "cannot group a container into its own descendant: scene"],
+    ["ungroup scene", "cannot ungroup top-level container: scene"],
+    ["scale r1 0", "scale factor must be positive"],
+    ["set r1 label test", "unknown attribute: label"],
+  ]) {
+    assert.equal(await cli.run(command!), `error: ${message}`);
+    assert.equal(session.getDocument().tree(), before);
+  }
+});
+
+test("unrepresentable text is rejected without destroying valid Unicode", async () => {
+  const session = new EditorSession(new MemoryDocumentStore());
+  const cli = new CommandProcessor(session);
+  await cli.run("init");
+  await cli.run('create text t 0 0 "开始 😀"');
+  const before = session.getDocument().tree();
+  assert.match(await cli.run('set t text "bad\u0000"'), /^error:/);
+  assert.match(await cli.run('set t fill "bad\u0001"'), /^error:/);
+  assert.equal(session.getDocument().tree(), before);
+});
+
 test("quoted text, empty text, Windows paths, comments and hex colors tokenize correctly", () => {
   const tokenizer = new Tokenizer();
   assert.deepEqual(tokenizer.tokenize('create text t 1 2 "开始 & next"'), ["create", "text", "t", "1", "2", "开始 & next"]);

@@ -1,9 +1,11 @@
 import { Numbers } from "./Numbers.js";
+import { TextValue } from "./TextValue.js";
 
 export abstract class Shape {
   private readonly presentation = new Map<string, string>();
 
   protected constructor(private readonly id: string, private readonly tag: string) {
+    TextValue.validate(id);
     if (!id || /\s/.test(id)) throw new Error("id must be non-empty and contain no whitespace");
   }
 
@@ -22,6 +24,7 @@ export abstract class Shape {
     if (!["fill", "stroke", "stroke-width"].includes(name)) {
       throw new Error(`unknown attribute: ${name}`);
     }
+    TextValue.validate(value);
     if (name === "stroke-width") {
       value = Numbers.format(Numbers.nonNegative(Numbers.parse(value, name), name));
     }
@@ -36,7 +39,7 @@ export abstract class Shape {
         "font-size", "font-family", "font-weight", "font-style", "text-anchor",
         "dominant-baseline", "opacity", "fill-opacity", "stroke-opacity",
         "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "visibility",
-      ].includes(name)) this.presentation.set(name, value);
+      ].includes(name)) this.presentation.set(name, TextValue.validate(value));
       else throw new Error(`unsupported SVG attribute: ${name}`);
     }
   }

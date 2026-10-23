@@ -24,7 +24,7 @@ export class Numbers {
   }
 
   static format(value: number): string {
-    return String(Object.is(value, -0) ? 0 : Number(value.toPrecision(14)));
+    return String(this.finite(value));
   }
 }
 

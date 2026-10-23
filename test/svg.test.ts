@@ -12,6 +12,19 @@ import { SvgCodec } from "../src/infrastructure/SvgCodec.js";
 
 const codec = new SvgCodec();
 
+test("serialization preserves representable numeric precision", () => {
+  const { document } = codec.decode('<svg><circle id="c" cx="9007199254740991" cy="0.1234567890123456" r="1"/></svg>');
+  const attributes = codec.decode(codec.encode(document)).document.find("c").getAttributes();
+  assert.equal(attributes.cx, "9007199254740991");
+  assert.equal(attributes.cy, "0.1234567890123456");
+});
+
+test("root IDs remain reserved for later edits", () => {
+  const { document } = codec.decode('<svg id="canvas"><circle id="c"/></svg>');
+  assert.throws(() => document.add(new ShapeFactory().create("g", "canvas", [])), /id already exists: canvas/);
+  assert.throws(() => document.group("canvas", ["c"]), /id already exists: canvas/);
+});
+
 test("read assignment example with missing ID, hierarchy and all seven elements", async () => {
   const source = await readFile("examples/other.svg", "utf8");
   const result = codec.decode(source);

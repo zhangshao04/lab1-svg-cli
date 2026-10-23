@@ -59,6 +59,7 @@ export class SvgDocument {
 
   add(shape: Shape, containerId?: string): void {
     const existing = new Set(this.getShapes().map(item => item.getId()));
+    if (this.rootAttributes.id) existing.add(this.rootAttributes.id);
     for (const item of shape.walk()) {
       if (existing.has(item.getId())) throw new Error(`id already exists: ${item.getId()}`);
       existing.add(item.getId());
@@ -73,7 +74,9 @@ export class SvgDocument {
   }
 
   group(id: string, ids: readonly string[]): string {
-    if (this.getShapes().some(shape => shape.getId() === id)) throw new Error(`id already exists: ${id}`);
+    if (this.rootAttributes.id === id || this.getShapes().some(shape => shape.getId() === id)) {
+      throw new Error(`id already exists: ${id}`);
+    }
     if (ids.length === 0) throw new Error("group requires at least one shape");
     if (new Set(ids).size !== ids.length) throw new Error("duplicate shape in group");
     const selected = ids.map(item => this.find(item));
@@ -98,7 +101,8 @@ export class SvgDocument {
   }
 
   ungroup(id: string): string {
-    const group = this.container(id);
+    const group = this.find(id);
+    if (!(group instanceof Group)) throw new Error(`not a container: ${id}`);
     const parent = this.parentOf(group);
     if (parent === this.root) throw new Error(`cannot ungroup top-level container: ${id}`);
     const position = parent.getChildren().indexOf(group);
