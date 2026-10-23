@@ -1,0 +1,44 @@
+@startuml
+!pragma layout smetana
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam defaultFontName SansSerif
+skinparam ArrowColor #526A80
+skinparam packageBackgroundColor #F0F5FB
+skinparam packageBorderColor #71879D
+left to right direction
+title SVG CLI - Module dependencies
+package "CLI" as cli {
+  [Repl]
+  [CommandProcessor]
+  [CommandRegistry]
+}
+package "Commands" as commands {
+  [EditCommand]
+  [19 concrete commands]
+}
+package "Application" as application {
+  [EditorSession]
+  [History]
+  interface DocumentStore
+}
+package "Domain" as domain {
+  [SvgDocument]
+  [Shape / Group / leaves]
+  [ShapeFactory]
+}
+package "Infrastructure" as infrastructure {
+  [FileDocumentStore]
+  [SvgCodec / SvgTransform]
+}
+[main] --> cli
+[main] --> infrastructure
+cli --> commands
+cli --> application
+commands --> application
+commands --> domain
+application --> domain
+infrastructure --> application : implements port
+infrastructure --> domain
+@enduml

@@ -1,6 +1,6 @@
 # Lab1 Phase 1 设计与开发记录
 
-本工程依据 `phase_cli_1.md` 实现。以下记录区分既定方案、实际实现与验证结果；未完成项不会写成已通过。
+本工程依据 [课程原文](requirements.md) 实现。以下记录区分既定方案、实际实现与验证结果。协作中用户提供作业目标、账号、私有仓库要求和截止日期；Codex 完成实现、测试及自查。记录中的技术审查为实际 AI 自查，不虚构学生发现问题或课堂讨论。
 
 ## 架构方案
 
@@ -16,6 +16,10 @@
 | `src/main.ts` | 唯一组装入口，连接具体存储与 CLI |
 | `test/` | 模型、命令、SVG 往返与真实进程集成测试 |
 | `examples/` | 可重放命令脚本及 SVG 示例 |
+
+![PlantUML 组件图](architecture.svg)
+
+完整可重绘源文件：[architecture.puml](architecture.puml)。下方为依赖关系的简化 PlantUML 表达。
 
 ```plantuml
 @startuml
@@ -44,6 +48,10 @@ infrastructure --> domain
 - **Factory**：图形工厂集中注册六种类型，CLI 创建与 SVG 导入共享同一类型分派入口。
 - **依赖倒置**：应用层声明存储接口，本地文件实现位于基础设施层，测试可用内存实现。
 
+落地位置：`commands/EditCommand.ts` 实现 Command 与快照恢复，`application/History.ts` 管理执行/撤销/重做，`domain/Shape.ts` 与 `domain/Group.ts` 实现组合多态，`domain/ShapeFactory.ts` 统一创建图形，`application/DocumentStore.ts` 是存储边界。
+
+编辑流程为：输入 → Tokenizer → CommandRegistry → 具体命令 → History → 在克隆文档上执行 change → 成功后替换当前文档并记录快照。异常沿调用链返回 CommandProcessor，由它统一输出单行 `error:`。`main.ts` 只组装依赖；生产代码的业务行为均封装在类中。
+
 按名字分派严格限制在 `CommandRegistry`（命令名到命令构造器）和 `ShapeFactory`（图形名到构造器）。**这两处固定注册表标记为后续插件化阶段待重构项**，当前不提前实现插件发现、加载或 `box` 类型。
 
 ### 依赖方向规则
@@ -54,6 +62,8 @@ infrastructure --> domain
 4. `cli` 依赖 `commands` 与 `application`；界面格式由对象提供，不按图形名称分支。
 5. `infrastructure` 依赖 `application` 的接口与 `domain`，禁止反向依赖界面和具体命令。
 6. `main` 是组装入口，允许引用各层具体实现。
+
+同层内部依赖允许。Node 内置输入输出仅在 cli/infrastructure/main 中使用，第三方 XML 库仅出现在 infrastructure。测试可引用各层，并用独立临时目录测试文件读写。
 
 ### 变化点假设
 
@@ -97,10 +107,96 @@ infrastructure --> domain
 - 引入 `--script` 回放入口；批处理出现错误时仍继续执行后续行，但最终退出码为 1，便于自动验收。
 - 完成 21 项测试，包括真实子进程回放作业流程图、重复覆盖保存及异常文件读写。
 
+### 2026-10-23：最终审查与修正
+
+- AI 审查发现初版 `Numbers.format` 固定 14 位有效数字会改变可精确表示的大数。改为保留 JavaScript number 的可往返字符串表示，并增加大整数和高精度小数回归测试。
+- 发现 SVG 根元素已有 ID 在后续 create/group 中未被保留；将根 ID 纳入唯一性检查，补充测试。
+- 发现文本中的非法控制字符会使保存结果不符合 SVG/XML 字符范围；新增 TextValue 校验，验证失败修改不破坏原文字，中文与 emoji 继续可用。
+- 统一 ungroup 缺失图形的错误语义，补充作业指定错误文本的逐项检查。
+- 增加跨父级分组、删除和连续撤销测试，以及自动模块依赖检查。最终 27 项测试通过。
+- 使用独立无界面 Edge 打开实际输出，核对中文流程图与嵌套变换导入后的外观；结果见下方截图。架构图通过本地 PlantUML 生成，没有上传项目源码到在线渲染服务。
+
+### 需求未明确处的实现决策
+
+| 问题 | 决策 |
+| --- | --- |
+| help 是否需要当前文档 | 允许启动后直接 help，其他需要文档的命令保持错误约定 |
+| IO 后旧历史是否还能恢复 | 成功 IO 清空历史并设屏障；下一次成功编辑开始新的历史，避免跨文档撤销 |
+| save 指定新路径后是否记住 | 记住最近一次成功 read/save 路径；失败不修改路径 |
+| group 顺序与新容器位置 | 文档顺序优先；同父级占首个选中位置，跨父级放画布末尾 |
+| g 的 set fill | 设置容器属性，采用 SVG 原生继承，不覆盖子节点显式属性 |
+| canvas 只给一个尺寸 | 报参数错误；修改画布必须同时给宽和高。init 可只给宽，高默认为 600 |
+| 不支持的外部 SVG 内容 | 明确拒绝，保持原文档；不承诺完整 SVG 浏览器规范 |
+| 导入变换的编辑坐标 | translate/正向等比 scale 折算到图形几何属性，再进行普通编辑 |
+| 数值精度 | 使用 JavaScript 双精度数；序列化不额外截断，超出有限数范围报错 |
+
+这些决策均作为工程解释记录，未冒充教师补充要求。
+
 ## 一致性自查
 
-待实现完成后检查实际目录、依赖和方案修订。
+### 模块划分
+
+实际目录与初始方案一致。增加的 Numbers、TextValue 属于 domain 内的校验职责，SvgTransform 属于 infrastructure 的导入兼容职责，未新增跨层模块。接口和类型定义可以单独成文件；每个生产类与其文件同名且一文件一类。
+
+修订记录已在模型阶段、命令阶段、SVG 阶段和最终审查中列出。`doc/requirements.md` 保存原始说明，`examples/` 保存可执行案例，`.tmp/`、编译产物与依赖目录不纳入 Git。
+
+### 依赖方向
+
+`test/architecture.test.ts` 扫描所有生产源码的导入关系，并校验上面的模块依赖规则；当前检查通过。抽样核对：
+
+- `domain/Group.ts` 只引用 Shape 和 Numbers，通过调用子对象的 move/scale 实现递归，无图形类型分支。
+- `application/EditorSession.ts` 只引用领域文档和应用层接口/历史管理器，没有 fs 或 XML 依赖。
+- `commands/CreateCommand.ts` 只依赖应用层、领域工厂和同层参数/命令基类。
+- `infrastructure/FileDocumentStore.ts` 实现 DocumentStore，负责 fs 操作，应用层无需反向引用它。
+- `cli/CommandRegistry.ts` 统一分派命令；`domain/ShapeFactory.ts` 统一分派图形类型。除此以外不按图形或命令名称分派业务行为。XML 节点种类与变换语法的校验不承担图形类型分派。
+
+静态检查同时禁止 `switch`，但测试不能代替架构判断；以上抽样核对用于确认分层意图。当前没有已知违反依赖方向的项。两个固定注册表仍为后续插件化待重构项。
 
 ## 质量保证手段
 
-计划使用 TypeScript 严格类型检查与 Node 内置测试运行器。重点覆盖六种图形、嵌套容器、复合编辑撤销、错误原子性、IO 历史屏障、XML 往返、自动补 ID、脚本重放及真实 CLI。最终在此填写实际结果。
+### 自动检查
+
+执行 `npm test`：先使用 TypeScript 严格模式编译，再使用 Node 内置测试运行器。最终本地结果为 **27 项通过、0 项失败、0 项跳过**。
+
+另外，从 Git 导出独立干净副本，在其中执行 `npm ci`、`npm test` 与流程图脚本回放，全部成功；未使用原工作目录的 node_modules 或 dist。该次测试的原始输出保存在 [test-results.txt](test-results.txt)。
+
+| 测试文件 | 核心证据 |
+| --- | --- |
+| `test/domain.test.ts` | 六种图形的移动/缩放/克隆、样式省略、嵌套组、绘制顺序、非法结构与属性 |
+| `test/commands.test.ts` | 全部编辑命令的单步撤销和重做、跨父级恢复、准确错误文本、失败回滚、redo 清空、IO 屏障、分词和 Unicode |
+| `test/svg.test.ts` | 七元素导入示例、自动 ID 预留、XML 转义、空文字、viewBox、嵌套变换、数值精度、拒绝未知内容、覆盖保存和失败 IO |
+| `test/cli.test.ts` | 独立进程验证 Windows 换行、错误后继续执行、脚本回放生成八元素流程图、退出码与启动失败 |
+| `test/architecture.test.ts` | 所有源文件的模块依赖、一类一文件、文件名匹配与禁止 switch |
+
+严格编译开启 strict、noUncheckedIndexedAccess、exactOptionalPropertyTypes、noImplicitOverride、noUnusedLocals 等检查。测试在系统临时目录进行真实文件读写并清理自身创建的目录，不依赖用户文件或网络。
+
+### 功能覆盖对应
+
+| 需求 | 对应实现 / 验证 |
+| --- | --- |
+| 19 条命令与六种内置图形 | CommandRegistry / ShapeFactory；命令、模型与 CLI 测试 |
+| 一条编辑一次撤销；复杂结构完整恢复 | EditCommand 快照 + History；逐命令往返与跨父级测试 |
+| 编辑失败不改变状态 | 候选文档提交机制；递归溢出与非法操作测试 |
+| 文件读写后历史屏障 | EditorSession；成功 IO/失败 IO 与显示类命令对照测试 |
+| 唯一 ID 与缺失补齐 | SvgDocument / SvgCodec；后出现显式 ID、根 ID、重复 ID 测试 |
+| SVG 可视化与往返 | DOM 编解码；浏览器截图、原样式和变换后视觉对照 |
+| 架构和设计模式 | 模块图、类职责说明、自动依赖检查和抽样审查 |
+| 开发过程 | 初始设计、模型、命令、IO、修正和文档分别提交并推送 |
+
+### 浏览器验证
+
+![实际 SVG 输出和变换往返对照](svg-preview.png)
+
+上方为作业流程图脚本输出，下方左右分别为原始嵌套变换示例与编辑器读入后重新保存的结果。已目视核对图形位置、尺寸、连线、颜色和文字。
+
+### 已知边界
+
+- 本阶段不实现 `box` 创建和插件加载；导入已有 `g data-kind="box"` 时作为普通 g 处理。
+- 本编辑器支持作业规定的 SVG 子集；不支持路径、CSS、滤镜、渐变、use、tspan 和任意仿射变换。不支持内容返回错误，保留当前文档。
+- 撤销为全量快照，时间和空间随文档规模增长；历史没有容量限制，适用于本阶段的小型文档。
+- 移动节点不会自动修改独立连线；普通组样式遵循 SVG 继承规则。
+- 已在 Windows / Node.js 24.14.1 完成本地验证；没有宣称已在其他系统运行测试。
+
+### 提交复核
+
+仓库保持私有。`main` 保存真实分步历史，最终交付使用 `final` 标签。使用 `git log --oneline` 查看阶段记录，使用 `git show final` 查看交付提交；远程标签通过 `git ls-remote --tags origin final` 验证。截止日期为用户确认的 2026 年 10 月 30 日。
