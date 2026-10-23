@@ -1,0 +1,14 @@
+{
+  "name": "lab1-svg-editor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript object-oriented SVG CLI editor for Lab1 Phase 1",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "cli": "npm run build --silent && node dist/src/main.js",
+    "test": "npm run build --silent && node --test dist/test/*.test.js",
+    "check": "npm test"
+  }
+}
