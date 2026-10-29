@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { SvgCodec } from "../src/infrastructure/SvgCodec.js";
 
 test("real CLI accepts CRLF input, recovers from an error, and returns batch failure", () => {
@@ -32,6 +32,34 @@ test("real --script mode writes browser-compatible SVG from the assignment flowc
     assert.equal(document.find("process").getAttributes().y, "100");
     assert.equal(document.find("process-label").getText(), "处理数据 v2");
   } finally { await rm(folder, { recursive: true, force: true }); }
+});
+
+test("real CLI preserves Unicode separators through save, read and undo", async () => {
+  const temporaryRoot = resolve(tmpdir());
+  const folder = await mkdtemp(join(temporaryRoot, "svg-editor-unicode-cli-"));
+  try {
+    const content = "开始\u0085中间\u2028下一行\u2029结束";
+    await writeFile(join(folder, "unicode.svg"), `<svg><text id="t" x="1" y="2">${content}</text></svg>`, "utf8");
+    const commands = ["read unicode.svg", "save copy.svg", "read copy.svg",
+      'set t text "temporary"', "undo", "save", "read copy.svg", "save unicode.svg"];
+    const result = spawnSync(process.execPath, [resolve("dist/src/main.js")], {
+      cwd: folder, input: commands.join("\r\n") + "\r\n", encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.equal(result.stderr, "");
+    assert.doesNotMatch(result.stdout, /error:/);
+    for (const filename of ["unicode.svg", "copy.svg"]) {
+      const xml = await readFile(join(folder, filename), "utf8");
+      assert.ok(xml.includes(content), "saved XML must retain the exact Unicode characters");
+      const text = new SvgCodec().decode(xml).document.find("t");
+      assert.equal(text.getText(), content);
+      assert.equal(text.getAttributes().x, "1");
+      assert.equal(text.getAttributes().y, "2");
+    }
+  } finally {
+    assert.equal(dirname(folder), temporaryRoot);
+    await rm(folder, { recursive: true, force: true });
+  }
 });
 
 test("invalid startup arguments and missing scripts fail clearly", () => {

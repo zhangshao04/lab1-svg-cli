@@ -133,6 +133,13 @@ infrastructure --> domain
 - 原实现对整个 XML 文本搜索 `<!DOCTYPE` / `<!ENTITY`，会误拒绝注释和 CDATA。改为检查解析后的文档类型节点；真正的 DTD、实体声明和非良构 XML 仍拒绝，普通文本按原内容往返保存。
 - 新增 10 项回归测试，修复前 8 项失败、2 项通过；修复后严格编译与完整 42 项测试全部通过。同步更新使用说明、支持边界和测试原始输出。
 
+### 2026-10-30：Unicode 换行修正
+
+- 提交前复查发现，XML 库默认的扩展换行规则会把 U+0085（NEL）、U+2028（行分隔符）、U+2029（段落分隔符）改成普通 LF，导致文字与属性值往返不一致。用户要求修复、补测并重新提交。
+- 为解析器显式配置 XML 1.0 换行处理，只将字面的 CR / CRLF 规范化为 LF，保留上述 Unicode 字符。保存时仍将文字中的 CR 写为字符引用，原有回车保护继续生效。
+- 新增 4 项回归测试：普通文字 / CDATA / 字符引用的多轮往返；CR、CRLF、LF 与 Unicode 分隔符的混合输入；根元素与图形属性；真实 CLI 子进程读取外部 SVG、另存、再次读取、修改与撤销后保存。修复前 4 项均失败，修复后严格编译和完整 46 项测试全部通过。
+- 本次未修改依赖或其他命令语义。同步更新文档及测试原始输出，以新提交继续保留开发历史，按用户要求更新 `final`。
+
 ### 需求未明确处的实现决策
 
 | 问题 | 决策 |
@@ -155,7 +162,7 @@ infrastructure --> domain
 
 实际目录与初始方案一致。增加的 Numbers、TextValue 属于 domain 内的校验职责，SvgTransform 属于 infrastructure 的导入兼容职责，未新增跨层模块。接口和类型定义可以单独成文件；每个生产类与其文件同名且一文件一类。
 
-修订记录已在模型阶段、命令阶段、SVG 阶段、最终审查和 10 月 29 日复查中列出。`doc/requirements.md` 保存原始说明，`examples/` 保存可执行案例，`.tmp/`、编译产物与依赖目录不纳入 Git。
+修订记录已在模型阶段、命令阶段、SVG 阶段、最终审查、10 月 29 日复查和 10 月 30 日 Unicode 修正中列出。`doc/requirements.md` 保存原始说明，`examples/` 保存可执行案例，`.tmp/`、编译产物与依赖目录不纳入 Git。
 
 ### 依赖方向
 
@@ -173,17 +180,17 @@ infrastructure --> domain
 
 ### 自动检查
 
-执行 `npm test`：先使用 TypeScript 严格模式编译，再使用 Node 内置测试运行器。2026 年 10 月 29 日第二轮修正后的本地结果为 **42 项通过、0 项失败、0 项跳过**。
+执行 `npm test`：先使用 TypeScript 严格模式编译，再使用 Node 内置测试运行器。2026 年 10 月 30 日 Unicode 修正后的本地结果为 **46 项通过、0 项失败、0 项跳过**。
 
-2026 年 10 月 23 日曾从 Git 导出独立干净副本，在其中执行 `npm ci`、`npm test` 与流程图脚本回放，全部成功；当时未使用原工作目录的 node_modules 或 dist。本次未修改依赖，在原工作目录重新执行完整测试；10 月 29 日的最新原始输出保存在 [test-results.txt](test-results.txt)。
+2026 年 10 月 30 日修正前，从当时的 `final`（`52c6609`）导出独立干净副本，重新执行 `npm ci`、42 项测试、需求原文典型会话与流程图案例，全部通过，未使用原工作目录的 node_modules 或 dist。本次未修改依赖，修正后在工作目录重新执行完整 46 项测试；最新原始输出保存在 [test-results.txt](test-results.txt)。
 
 | 测试文件 | 核心证据 |
 | --- | --- |
 | `test/domain.test.ts` | 六种图形的移动/缩放/克隆、样式省略、嵌套组、绘制顺序、非法结构与属性 |
 | `test/commands.test.ts` | 全部编辑命令的单步撤销和重做、跨父级恢复、准确错误文本、失败回滚、redo 清空、IO 屏障、分词和 Unicode；默认保存路径；网络路径原样传递与文字转义兼容 |
-| `test/svg.test.ts` | 七元素导入示例、自动 ID 预留、XML 转义、空文字、viewBox、嵌套变换、数值精度、拒绝未知内容、覆盖保存和失败 IO；CR/LF/CRLF 等字符连续往返及真实文件验证 |
+| `test/svg.test.ts` | 七元素导入示例、自动 ID 预留、XML 转义、空文字、viewBox、嵌套变换、数值精度、拒绝未知内容、覆盖保存和失败 IO；CR/LF/CRLF 与 Unicode 分隔符在文字、CDATA、字符引用和属性中的往返 |
 | `test/svg-import.test.ts` | 根属性非法字符拒绝、真实文件导入失败后文档/路径/历史保持、CDATA 与实际声明区分、继承/覆盖虚线的缩放与往返、特殊值、非法单位及溢出 |
-| `test/cli.test.ts` | 独立进程验证 Windows 换行、错误后继续执行、脚本回放生成八元素流程图、退出码与启动失败 |
+| `test/cli.test.ts` | 独立进程验证 Windows 换行、错误后继续执行、脚本回放生成八元素流程图、退出码与启动失败；外部 SVG 的 Unicode 文字读写及撤销后原样保存 |
 | `test/architecture.test.ts` | 所有源文件的模块依赖、一类一文件、文件名匹配与禁止 switch |
 
 严格编译开启 strict、noUncheckedIndexedAccess、exactOptionalPropertyTypes、noImplicitOverride、noUnusedLocals 等检查。测试在系统临时目录进行真实文件读写并清理自身创建的目录，不依赖用户文件或网络。
@@ -199,7 +206,7 @@ infrastructure --> domain
 | 无参数 save 写回读入路径 | EditorSession 分别记录读入路径和保存路径；另存副本、切换读入文件与失败 IO 回归测试 |
 | 带空格的 Windows 网络路径 | Tokenizer 保留 UNC / 设备路径反斜杠；分词、原文字转义与内存存储参数传递测试 |
 | 唯一 ID 与缺失补齐 | SvgDocument / SvgCodec；后出现显式 ID、根 ID、重复 ID 测试 |
-| SVG 可视化与往返 | DOM 编解码；浏览器截图、原样式和变换后视觉对照；文字回车、CDATA、根属性校验与虚线变换回归测试 |
+| SVG 可视化与往返 | DOM 编解码；浏览器截图、原样式和变换后视觉对照；文字回车、Unicode 分隔符、CDATA、根属性校验与虚线变换回归测试 |
 | 架构和设计模式 | 模块图、类职责说明、自动依赖检查和抽样审查 |
 | 开发过程 | 初始设计、模型、命令、IO、修正和文档分别提交并推送 |
 
@@ -222,4 +229,4 @@ infrastructure --> domain
 
 仓库保持私有。`main` 保存真实分步历史，最终交付使用 `final` 标签。使用 `git log --oneline` 查看阶段记录，使用 `git show final` 查看交付提交；远程标签通过 `git ls-remote --tags origin final` 验证。截止日期为用户确认的 2026 年 10 月 30 日。
 
-2026 年 10 月 29 日按用户要求完成两轮修正并重新提交；原交付提交 `2b500c9` 和第一轮修正 `d6ddafe` 均保留在历史中，`final` 用于第二轮修正后的版本。
+2026 年 10 月 29 日完成两轮修正，10 月 30 日补充 Unicode 换行修正并按用户要求重新提交。此前的 `2b500c9`、`d6ddafe`、`52c6609` 均保留在历史中，`final` 用于本次 Unicode 修正后的版本。

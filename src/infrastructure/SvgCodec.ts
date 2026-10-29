@@ -23,8 +23,11 @@ export class SvgCodec {
     let xml: XmlDocument;
     try {
       TextValue.validate(source);
-      xml = new DOMParser({ onError: (_level, message) => { throw new Error(message); } })
-        .parseFromString(source, "application/xml");
+      xml = new DOMParser({
+        // Match our XML 1.0 output: normalize CR/CRLF, preserving NEL, LS and PS.
+        normalizeLineEndings: input => input.replace(/\r\n?/g, "\n"),
+        onError: (_level, message) => { throw new Error(message); },
+      }).parseFromString(source, "application/xml");
     } catch {
       throw new Error("invalid SVG: malformed XML");
     }

@@ -74,6 +74,41 @@ test("text character references preserve CR, LF, CRLF, tabs and literal entity t
   }
 });
 
+test("Unicode line separators survive plain text, CDATA and character references", () => {
+  for (const point of [0x85, 0x2028, 0x2029]) {
+    const separator = String.fromCodePoint(point);
+    const expected = `开始${separator}结束`;
+    for (const content of [expected, `<![CDATA[${expected}]]>`, `开始&#x${point.toString(16)};结束`]) {
+      let document = codec.decode(`<?xml version="1.0"?><svg><text id="t">${content}</text></svg>`).document;
+      assert.equal(document.find("t").getText(), expected, `U+${point.toString(16)}`);
+      for (let iteration = 0; iteration < 2; iteration++) {
+        document = codec.decode(codec.encode(document)).document;
+        assert.equal(document.find("t").getText(), expected, `U+${point.toString(16)} round ${iteration}`);
+      }
+    }
+  }
+});
+
+test("XML 1.0 normalizes only literal CR and CRLF, preserving Unicode separators and references", () => {
+  const source = "a\r\nb\rc\nd\r\u0085e\u0085f\u2028g\u2029h&#13;&#10;&#133;&#8232;&#8233;";
+  const expected = "a\nb\nc\nd\n\u0085e\u0085f\u2028g\u2029h\r\n\u0085\u2028\u2029";
+  const { document } = codec.decode(`<svg><text id="t">${source}</text></svg>`);
+  assert.equal(document.find("t").getText(), expected);
+  assert.equal(codec.decode(codec.encode(document)).document.find("t").getText(), expected);
+});
+
+test("Unicode line separators survive root and shape attributes", () => {
+  const expected = "a\u0085b\u2028c\u2029d";
+  for (const value of [expected, "a&#133;b&#8232;c&#8233;d"]) {
+    let document = codec.decode(`<svg data-note="${value}"><text id="t" data-note="${value}">标签</text></svg>`).document;
+    for (let iteration = 0; iteration < 3; iteration++) {
+      assert.equal(document.getRootAttributes()["data-note"], expected);
+      assert.equal(document.find("t").getAttributes()["data-note"], expected);
+      document = codec.decode(codec.encode(document)).document;
+    }
+  }
+});
+
 test("read and save commands preserve text character references in real files", async () => {
   const folder = await mkdtemp(join(tmpdir(), "svg-editor-text-test-"));
   try {
