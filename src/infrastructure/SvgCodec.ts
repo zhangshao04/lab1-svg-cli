@@ -6,21 +6,30 @@ import { Numbers } from "../domain/Numbers.js";
 import type { Shape } from "../domain/Shape.js";
 import { ShapeFactory } from "../domain/ShapeFactory.js";
 import { SvgDocument } from "../domain/SvgDocument.js";
+import { TextValue } from "../domain/TextValue.js";
 import { SvgTransform } from "./SvgTransform.js";
+
+interface InheritedStyle {
+  fontSize: string;
+  strokeWidth: string;
+  strokeDasharray: string;
+}
 
 export class SvgCodec {
   private readonly namespace = "http://www.w3.org/2000/svg";
   private readonly factory = new ShapeFactory();
 
   decode(source: string): LoadedDocument {
-    if (/<!DOCTYPE|<!ENTITY/i.test(source)) throw new Error("invalid SVG: DTD and entity declarations are not supported");
     let xml: XmlDocument;
     try {
+      TextValue.validate(source);
       xml = new DOMParser({ onError: (_level, message) => { throw new Error(message); } })
         .parseFromString(source, "application/xml");
     } catch {
       throw new Error("invalid SVG: malformed XML");
     }
+    // Inspect XML structure so declaration-like comments and CDATA remain ordinary text.
+    if (xml.doctype) throw new Error("invalid SVG: DTD and entity declarations are not supported");
     const root = xml.documentElement;
     if (!root || root.localName !== "svg") throw new Error("invalid SVG: expected <svg> root");
     this.checkNamespace(root);
@@ -48,7 +57,11 @@ export class SvgCodec {
     }
     const warnings: string[] = [];
     const transform = SvgTransform.parse(attributes.transform);
-    const inherited = { fontSize: attributes["font-size"] ?? "16", strokeWidth: attributes["stroke-width"] ?? "1" };
+    const inherited: InheritedStyle = {
+      fontSize: attributes["font-size"] ?? "16",
+      strokeWidth: attributes["stroke-width"] ?? "1",
+      strokeDasharray: this.resolveDashArray(attributes["stroke-dasharray"], "none"),
+    };
     for (const element of this.elements(root)) {
       document.add(this.decodeShape(element, reserved, warnings, transform, inherited));
     }
@@ -71,7 +84,7 @@ export class SvgCodec {
 
   private decodeShape(
     element: XmlElement, reserved: Set<string>, warnings: string[],
-    parentTransform: SvgTransform, inherited: { fontSize: string; strokeWidth: string },
+    parentTransform: SvgTransform, inherited: InheritedStyle,
   ): Shape {
     this.checkNamespace(element);
     const type = element.localName ?? element.tagName;
@@ -90,6 +103,7 @@ export class SvgCodec {
     const style = {
       fontSize: attributes["font-size"] ?? inherited.fontSize,
       strokeWidth: attributes["stroke-width"] ?? inherited.strokeWidth,
+      strokeDasharray: this.resolveDashArray(attributes["stroke-dasharray"], inherited.strokeDasharray),
     };
     const shape = this.factory.fromSvg(type, id, attributes, element.textContent ?? "");
     const children = this.elements(element);
@@ -104,6 +118,9 @@ export class SvgCodec {
       if (transform.scale() !== 1) {
         const stroke = Numbers.nonNegative(Numbers.parse(style.strokeWidth.replace(/px$/, ""), "stroke-width"), "stroke-width");
         shape.setAttribute("stroke-width", Numbers.format(stroke * transform.scale()));
+        if (style.strokeDasharray !== "none") {
+          shape.importPresentation({ "stroke-dasharray": this.scaleDashArray(style.strokeDasharray, transform.scale()) });
+        }
         if (shape.getText() !== undefined) {
           const size = Numbers.nonNegative(Numbers.parse(style.fontSize.replace(/px$/, ""), "font-size"), "font-size");
           shape.importPresentation({ "font-size": Numbers.format(size * transform.scale()) });
@@ -127,7 +144,27 @@ export class SvgCodec {
   }
 
   private attributes(element: XmlElement): Record<string, string> {
-    return Object.fromEntries(Array.from(element.attributes).map(attribute => [attribute.name, attribute.value]));
+    // Validate decoded character references too, including root-only attributes.
+    return Object.fromEntries(Array.from(element.attributes)
+      .map(attribute => [attribute.name, TextValue.validate(attribute.value)]));
+  }
+
+  private resolveDashArray(value: string | undefined, inherited: string): string {
+    if (value === undefined) return inherited;
+    const trimmed = value.trim();
+    const keyword = trimmed.toLowerCase();
+    if (["inherit", "unset"].includes(keyword)) return inherited;
+    return ["none", "initial"].includes(keyword) ? "none" : trimmed;
+  }
+
+  private scaleDashArray(value: string, factor: number): string {
+    if (!value || /^,|,$|,\s*,/.test(value)) throw new Error(`invalid SVG stroke-dasharray: ${value}`);
+    return value.split(/[\s,]+/).map(length => {
+      const match = /^([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(?:px)?$/i.exec(length);
+      if (!match) throw new Error(`unsupported SVG stroke-dasharray during scale: ${value} (use numbers or px)`);
+      const number = Numbers.nonNegative(Numbers.parse(match[1]!, "stroke-dasharray"), "stroke-dasharray");
+      return Numbers.format(number * factor);
+    }).join(" ");
   }
 
   private elements(node: XmlNode): XmlElement[] {

@@ -75,6 +75,37 @@ test("no-document errors and help are available at startup", async () => {
   assert.equal(await cli.run(" # comment"), "");
 });
 
+test("quoted network paths preserve backslashes without breaking ordinary text escapes", () => {
+  const tokenizer = new Tokenizer();
+  for (const path of [
+    String.raw`\\server\course files\input.svg`,
+    String.raw`\\?\UNC\server\course files\input.svg`,
+    String.raw`\\?\C:\course files\input.svg`,
+  ]) {
+    assert.deepEqual(tokenizer.tokenize(`read "${path}"`), ["read", path]);
+    const escapedPath = path.replaceAll("\\", "\\\\");
+    assert.deepEqual(tokenizer.tokenize(`read "${escapedPath}"`), ["read", path]);
+  }
+  assert.deepEqual(tokenizer.tokenize(String.raw`set t text "say \"hello\" and \\ end"`),
+    ["set", "t", "text", 'say "hello" and \\ end']);
+  assert.deepEqual(tokenizer.tokenize(String.raw`set t text "\\"`), ["set", "t", "text", "\\"]);
+  assert.throws(() => tokenizer.tokenize(String.raw`read "\\server\course files\input.svg`), /unterminated/);
+});
+
+test("read and save keep the exact network path including spaces and its default destination", async () => {
+  const store = new MemoryDocumentStore();
+  const cli = new CommandProcessor(new EditorSession(store));
+  const original = String.raw`\\server\course files\original.svg`;
+  const copy = String.raw`\\server\course files\copy.svg`;
+  for (const line of ["init", "create circle c 1 2 3", `save "${original}"`,
+    `read "${original}"`, `save "${copy}"`, "move c 10 0"]) {
+    assert.doesNotMatch(await cli.run(line), /^error:/, line);
+  }
+  assert.equal(await cli.run("save"), `saved to ${original} (1 elements)`);
+  assert.equal((await store.read(original)).document.find("c").getAttributes().cx, "11");
+  assert.equal((await store.read(copy)).document.find("c").getAttributes().cx, "1");
+});
+
 test("all edit commands are single undo units with exact redo restoration", async () => {
   const session = new EditorSession(new MemoryDocumentStore());
   const cli = new CommandProcessor(session);
