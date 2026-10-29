@@ -2,38 +2,43 @@
 > lab1-svg-editor@0.1.0 test
 > npm run build --silent && node --test dist/test/*.test.js
 
-✔ source follows layer dependencies, one-class-per-file and no switch dispatch (570.6318ms)
-✔ real CLI accepts CRLF input, recovers from an error, and returns batch failure (103.4389ms)
-✔ real --script mode writes browser-compatible SVG from the assignment flowchart (110.5877ms)
-✔ invalid startup arguments and missing scripts fail clearly (184.8056ms)
-✔ cross-parent grouping and deletion undo restore every parent and sibling order (4.0905ms)
-✔ specified error messages match and failed attempts never change state (1.197ms)
-✔ unrepresentable text is rejected without destroying valid Unicode (0.4409ms)
-✔ quoted text, empty text, Windows paths, comments and hex colors tokenize correctly (0.176ms)
-✔ no-document errors and help are available at startup (0.6279ms)
-✔ all edit commands are single undo units with exact redo restoration (5.8615ms)
-✔ failed commands preserve both document and redo; new edits clear redo (1.0636ms)
-✔ document IO barriers clear old history; queries leave history intact (0.6758ms)
-✔ partially executed recursive overflow is rolled back as a whole (0.3206ms)
-✔ all six types implement geometry and preserve omitted appearance (1.8409ms)
-✔ nested groups move/scale recursively and clones are independent (1.132ms)
-✔ group keeps sibling order, ungroup restores its slot, front/back follow paint order (1.2039ms)
-✔ invalid structure requests leave the tree untouched (0.5056ms)
-✔ geometry, attributes, ID case and unsupported types have explicit validation (0.3046ms)
-✔ serialization preserves representable numeric precision (4.977ms)
-✔ root IDs remain reserved for later edits (0.6802ms)
-✔ read assignment example with missing ID, hierarchy and all seven elements (10.67ms)
-✔ automatic IDs reserve later explicit IDs and remain unique across nested groups (0.5655ms)
-✔ SVG round-trip escapes text and attributes and preserves text whitespace (1.073ms)
-✔ empty text, absent colors, root appearance, viewBox and data-kind survive round-trip (0.8204ms)
-✔ nested translate and uniform scale normalize geometry and text size (10.7909ms)
-✔ invalid XML, unsupported SVG and transforms are rejected explicitly (0.9349ms)
-✔ file saves replace existing files; failed saves and reads preserve session and history (10.9041ms)
-ℹ tests 27
+✔ source follows layer dependencies, one-class-per-file and no switch dispatch (19.4055ms)
+✔ real CLI accepts CRLF input, recovers from an error, and returns batch failure (89.8094ms)
+✔ real --script mode writes browser-compatible SVG from the assignment flowchart (97.816ms)
+✔ invalid startup arguments and missing scripts fail clearly (160.9575ms)
+✔ cross-parent grouping and deletion undo restore every parent and sibling order (3.6044ms)
+✔ specified error messages match and failed attempts never change state (1.0638ms)
+✔ unrepresentable text is rejected without destroying valid Unicode (0.3833ms)
+✔ quoted text, empty text, Windows paths, comments and hex colors tokenize correctly (0.1943ms)
+✔ no-document errors and help are available at startup (0.2374ms)
+✔ all edit commands are single undo units with exact redo restoration (4.3062ms)
+✔ failed commands preserve both document and redo; new edits clear redo (0.7814ms)
+✔ document IO barriers clear old history; queries leave history intact (0.5909ms)
+✔ default save keeps the read path after saving a copy and follows the next successful read (0.3658ms)
+✔ new documents remember successful saves and init clears both read and saved paths (0.5546ms)
+✔ failed IO after saving a copy preserves the read path and redo history (0.422ms)
+✔ partially executed recursive overflow is rolled back as a whole (0.3835ms)
+✔ all six types implement geometry and preserve omitted appearance (1.5471ms)
+✔ nested groups move/scale recursively and clones are independent (0.9635ms)
+✔ group keeps sibling order, ungroup restores its slot, front/back follow paint order (0.8479ms)
+✔ invalid structure requests leave the tree untouched (0.403ms)
+✔ geometry, attributes, ID case and unsupported types have explicit validation (0.2505ms)
+✔ serialization preserves representable numeric precision (4.4498ms)
+✔ root IDs remain reserved for later edits (0.6003ms)
+✔ read assignment example with missing ID, hierarchy and all seven elements (4.8155ms)
+✔ automatic IDs reserve later explicit IDs and remain unique across nested groups (0.5044ms)
+✔ SVG round-trip escapes text and attributes and preserves text whitespace (0.931ms)
+✔ text character references preserve CR, LF, CRLF, tabs and literal entity text across repeated round-trips (2.163ms)
+✔ read and save commands preserve text character references in real files (14.5935ms)
+✔ empty text, absent colors, root appearance, viewBox and data-kind survive round-trip (0.6519ms)
+✔ nested translate and uniform scale normalize geometry and text size (1.8532ms)
+✔ invalid XML, unsupported SVG and transforms are rejected explicitly (0.9962ms)
+✔ file saves replace existing files; failed saves and reads preserve session and history (7.6895ms)
+ℹ tests 32
 ℹ suites 0
-ℹ pass 27
+ℹ pass 32
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 656.4039
+ℹ duration_ms 455.6315

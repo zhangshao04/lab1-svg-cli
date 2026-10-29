@@ -149,6 +149,70 @@ test("document IO barriers clear old history; queries leave history intact", asy
   assert.match(await cli.run("redo"), /undo not allowed after io command/);
 });
 
+test("default save keeps the read path after saving a copy and follows the next successful read", async () => {
+  const store = new MemoryDocumentStore();
+  const cli = new CommandProcessor(new EditorSession(store));
+  for (const line of ["init", "create circle c 0 0 10", "save original.svg",
+    "read original.svg", "save copy.svg", "move c 20 0"]) {
+    assert.doesNotMatch(await cli.run(line), /^error:/, line);
+  }
+  assert.equal(await cli.run("save"), "saved to original.svg (1 elements)");
+  assert.equal((await store.read("original.svg")).document.find("c").getAttributes().cx, "20");
+  assert.equal((await store.read("copy.svg")).document.find("c").getAttributes().cx, "0");
+  assert.equal(await cli.run("undo"), "error: undo not allowed after io command");
+
+  assert.doesNotMatch(await cli.run("read copy.svg"), /^error:/);
+  assert.doesNotMatch(await cli.run("move c 3 0"), /^error:/);
+  assert.equal(await cli.run("save"), "saved to copy.svg (1 elements)");
+  assert.equal((await store.read("copy.svg")).document.find("c").getAttributes().cx, "3");
+  assert.equal((await store.read("original.svg")).document.find("c").getAttributes().cx, "20");
+});
+
+test("new documents remember successful saves and init clears both read and saved paths", async () => {
+  const store = new MemoryDocumentStore();
+  const cli = new CommandProcessor(new EditorSession(store));
+  await cli.run("init");
+  assert.equal(await cli.run("save"), "error: no file path. use 'save <file.svg>'");
+  await cli.run("create circle c 0 0 10");
+  assert.doesNotMatch(await cli.run("save first.svg"), /^error:/);
+  await cli.run("move c 1 0");
+  assert.equal(await cli.run("save"), "saved to first.svg (1 elements)");
+  assert.doesNotMatch(await cli.run("save second.svg"), /^error:/);
+  await cli.run("move c 2 0");
+  assert.match(await cli.run("save unwritable.svg"), /^error: cannot write file:/);
+  assert.match(await cli.run("read missing.svg"), /^error: cannot read file:/);
+  assert.match(await cli.run("undo"), /^undone:/);
+  assert.match(await cli.run("redo"), /^redone:/);
+  assert.equal(await cli.run("save"), "saved to second.svg (1 elements)");
+  assert.equal((await store.read("first.svg")).document.find("c").getAttributes().cx, "1");
+  assert.equal((await store.read("second.svg")).document.find("c").getAttributes().cx, "3");
+
+  await cli.run("init");
+  assert.equal(await cli.run("save"), "error: no file path. use 'save <file.svg>'");
+  await cli.run("read first.svg");
+  await cli.run("save copy.svg");
+  await cli.run("init");
+  assert.equal(await cli.run("save"), "error: no file path. use 'save <file.svg>'");
+});
+
+test("failed IO after saving a copy preserves the read path and redo history", async () => {
+  const store = new MemoryDocumentStore();
+  const session = new EditorSession(store);
+  const cli = new CommandProcessor(session);
+  for (const line of ["init", "create circle c 0 0 10", "save original.svg",
+    "read original.svg", "save copy.svg", "move c 20 0", "undo"]) {
+    assert.doesNotMatch(await cli.run(line), /^error:/, line);
+  }
+  const before = session.getDocument().tree();
+  assert.match(await cli.run("save unwritable.svg"), /^error: cannot write file:/);
+  assert.match(await cli.run("read missing.svg"), /^error: cannot read file:/);
+  assert.equal(session.getDocument().tree(), before);
+  assert.match(await cli.run("redo"), /^redone:/);
+  assert.equal(await cli.run("save"), "saved to original.svg (1 elements)");
+  assert.equal((await store.read("original.svg")).document.find("c").getAttributes().cx, "20");
+  assert.equal((await store.read("copy.svg")).document.find("c").getAttributes().cx, "0");
+});
+
 test("partially executed recursive overflow is rolled back as a whole", async () => {
   const session = new EditorSession(new MemoryDocumentStore());
   const cli = new CommandProcessor(session);

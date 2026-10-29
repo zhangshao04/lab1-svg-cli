@@ -64,7 +64,9 @@ export class SvgCodec {
       root.appendChild(this.encodeShape(xml, shape, 1));
     }
     if (document.getChildren().length) root.appendChild(xml.createTextNode("\n"));
-    return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(xml) + "\n";
+    // XML parsers normalize literal CR; character references preserve the text on read.
+    const serialized = new XMLSerializer().serializeToString(xml).replace(/\r/g, "&#13;");
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + serialized + "\n";
   }
 
   private decodeShape(

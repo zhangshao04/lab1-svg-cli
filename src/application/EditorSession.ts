@@ -4,7 +4,8 @@ import { History } from "./History.js";
 
 export class EditorSession {
   private document: SvgDocument | undefined;
-  private path: string | undefined;
+  private readPath: string | undefined;
+  private lastSavedPath: string | undefined;
   private readonly history = new History();
 
   constructor(private readonly store: DocumentStore) {}
@@ -20,7 +21,8 @@ export class EditorSession {
   init(width = 800, height = 600): string {
     const document = new SvgDocument(width, height);
     this.document = document;
-    this.path = undefined;
+    this.readPath = undefined;
+    this.lastSavedPath = undefined;
     this.history.barrier();
     return `canvas ${document.dimensions()} created`;
   }
@@ -28,17 +30,19 @@ export class EditorSession {
   async read(path: string): Promise<string> {
     const loaded = await this.store.read(path);
     this.document = loaded.document;
-    this.path = path;
+    this.readPath = path;
+    this.lastSavedPath = undefined;
     this.history.barrier();
     return [...loaded.warnings, `read ${path} (${loaded.document.size()} elements)`].join("\n");
   }
 
   async save(path?: string): Promise<string> {
     const document = this.getDocument();
-    const destination = path ?? this.path;
+    // Saving a copy must not replace the destination established by read.
+    const destination = path ?? this.readPath ?? this.lastSavedPath;
     if (!destination) throw new Error("no file path. use 'save <file.svg>'");
     await this.store.write(destination, document);
-    this.path = destination;
+    this.lastSavedPath = destination;
     this.history.barrier();
     return `saved to ${destination} (${document.size()} elements)`;
   }

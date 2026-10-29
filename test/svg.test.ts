@@ -55,6 +55,45 @@ test("SVG round-trip escapes text and attributes and preserves text whitespace",
   assert.equal(codec.decode(xml).document.find("中文-title").getAttributes().fill, 'url("#color")');
 });
 
+test("text character references preserve CR, LF, CRLF, tabs and literal entity text across repeated round-trips", () => {
+  for (const [source, expected] of [
+    ["a&#13;b", "a\rb"],
+    ["a&#xD;&#xA;b", "a\r\nb"],
+    ["a\nb", "a\nb"],
+    ["&#9;中文 😀 &#13;&#10;&amp; &lt; &gt; &amp;#13;", "\t中文 😀 \r\n& < > &#13;"],
+    ["", ""],
+  ] as const) {
+    let document = codec.decode(`<svg><text id="t">${source}</text></svg>`).document;
+    assert.equal(document.find("t").getText(), expected);
+    for (let iteration = 0; iteration < 2; iteration++) {
+      const xml = codec.encode(document);
+      document = codec.decode(xml).document;
+      assert.equal(document.find("t").getText(), expected, source);
+      assert.doesNotMatch(xml, /\r/, "carriage returns must be encoded as character references");
+    }
+  }
+});
+
+test("read and save commands preserve text character references in real files", async () => {
+  const folder = await mkdtemp(join(tmpdir(), "svg-editor-text-test-"));
+  try {
+    const sourcePath = join(folder, "original.svg");
+    const copyPath = join(folder, "copy.svg");
+    await writeFile(sourcePath, '<svg><text id="t">开始&#13;&#10;下一行&#13;末尾&#9;&amp;#13;</text></svg>', "utf8");
+    const store = new FileDocumentStore();
+    const cli = new CommandProcessor(new EditorSession(store));
+    for (const line of [`read "${sourcePath}"`, `save "${copyPath}"`, "move t 5 0", "save"]) {
+      assert.doesNotMatch(await cli.run(line), /^error:/, line);
+    }
+    for (const path of [sourcePath, copyPath]) {
+      const text = (await store.read(path)).document.find("t");
+      assert.equal(text.getText(), "开始\r\n下一行\r末尾\t&#13;");
+      assert.equal(text.getAttributes().x, path === sourcePath ? "5" : "0");
+      assert.match(await readFile(path, "utf8"), /&#13;/);
+    }
+  } finally { await rm(folder, { recursive: true, force: true }); }
+});
+
 test("empty text, absent colors, root appearance, viewBox and data-kind survive round-trip", () => {
   const { document } = codec.decode('<svg width="200px" height="100px" viewBox="-10 -20 200 100" fill="red"><g id="g" data-kind="box"><text id="t" x="0" y="0"></text><line id="l"/></g></svg>');
   const roundTrip = codec.decode(codec.encode(document)).document;

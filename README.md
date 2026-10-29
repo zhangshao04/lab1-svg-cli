@@ -77,7 +77,7 @@ npm run cli -- --script examples/flowchart.txt
 
 - 一次编辑对应一个撤销单元。失败命令不改变文档、历史和保存路径；undo 后的成功新编辑清空 redo。
 - 成功执行 init/read/save/canvas 修改尺寸会清空历史并禁止 undo/redo，直到下一条成功编辑。canvas 查询、tree、show、help 不影响历史。
-- save 无参数使用最近一次成功 read/save 的路径；新建且从未保存的文档须先提供路径。
+- save 无参数使用最近一次成功 read 的路径，另存到其他文件不会改变它。init 新建且未读入文件时，使用最近一次成功保存的路径；尚无路径时须先显式提供。init 会清空所有记住的路径。
 - scale 以坐标原点为基准，同时缩放位置和尺寸；CLI scale 不修改字号和描边宽度。move/scale 对容器递归作用于全部子孙。
 - group 保留文档中的相对顺序。同父级的新组占据第一个选中元素的位置，跨父级的新组放在画布末尾。ungroup 按要求禁止解散根级容器。
 - front 放到同级 SVG 子节点末尾，视觉上位于最前；back 放到开头。
@@ -85,7 +85,7 @@ npm run cli -- --script examples/flowchart.txt
 
 ## SVG 支持范围
 
-支持本阶段六种元素、普通属性和纯文字。保存保持层级、绘制顺序、ID 及显式样式；读取缺失 ID 时自动补齐并输出警告。保留 `viewBox`、常用文字和描边属性以及 `data-*` 标记。
+支持本阶段六种元素、普通属性和纯文字。保存保持层级、绘制顺序、ID 及显式样式；读取缺失 ID 时自动补齐并输出警告。保留 `viewBox`、常用文字和描边属性以及 `data-*` 标记。文字中的回车以 XML 字符引用保存，避免再次读取时被规范化为换行。
 
 额外支持导入正向等比 `scale` 与 `translate` 的嵌套变换，并将其折算为几何坐标；[examples/transforms.svg](examples/transforms.svg) 来自需求背景案例。未安装 box 插件时，`g data-kind="box"` 作为普通组读取，`create box` 按本阶段要求报未知类型。
 
@@ -93,6 +93,6 @@ npm run cli -- --script examples/flowchart.txt
 
 ## 验证与交付
 
-`npm test` 包含严格类型检查和 27 项测试，覆盖六种图形、全部编辑命令、层级顺序、撤销重做、错误原子性、数值精度、SVG 往返和真实 CLI 子进程。架构检查同时约束模块依赖、一类一文件和禁止 switch 分派。
+`npm test` 包含严格类型检查和 32 项测试，覆盖六种图形、全部编辑命令、层级顺序、撤销重做、错误原子性、数值精度、默认保存路径、文字字符引用、SVG 往返和真实 CLI 子进程。架构检查同时约束模块依赖、一类一文件和禁止 switch 分派。
 
 查看开发历史：`git log --oneline`。查看最终交付：`git show final`。后续修改已交付版本时，应按课程提交要求管理新提交和标签，不应随意覆盖远程标签。
